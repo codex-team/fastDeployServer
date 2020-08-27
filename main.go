@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"strings"
 
@@ -13,6 +15,8 @@ import (
 )
 
 var listenAddr = flag.String("addr", "localhost:8090", "listen host and port")
+var codexBotURL = flag.String("webhook", "", "notification URI from CodeX Bot")
+var serverName = flag.String("name", "default", "server name")
 var composeFilepaths arrayFlags
 var configs []DockerComposeConfig
 
@@ -106,6 +110,18 @@ func restart(targetImageName string) {
 			}
 
 			log.Printf("  [+] Done.\n")
+		}
+	}
+
+	if *codexBotURL != "" {
+		data := url.Values{}
+		data.Set("message", fmt.Sprintf("📦 %s has been deployed (%s)", *serverName, targetImageName))
+
+		_, err := MakeHTTPRequest("POST", *codexBotURL, []byte(data.Encode()), map[string]string{
+			"Content-Type": "application/x-www-form-urlencoded",
+		})
+		if err != nil {
+			log.Fatalf("Webhook error: %v", err)
 		}
 	}
 

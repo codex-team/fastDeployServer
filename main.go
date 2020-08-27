@@ -12,14 +12,22 @@ import (
 	"github.com/docker/docker/client"
 )
 
-var config DockerComposeConfig
-var composeFilepath = flag.String("compose-file", "docker-compose.yml", "docker-compose configuration path")
 var listenAddr = flag.String("addr", "localhost:8090", "listen host and port")
+var composeFilepaths arrayFlags
+var configs []DockerComposeConfig
 
 func main() {
+	flag.Var(&composeFilepaths, "f", "docker-compose configuration path")
 	flag.Parse()
+	if len(composeFilepaths) == 0 {
+		composeFilepaths = []string{"docker-compose.yml"}
+	}
 
-	config.parse(*composeFilepath)
+	for _, file := range composeFilepaths {
+		var config DockerComposeConfig
+		config.parse(file)
+		configs = append(configs, config)
+	}
 
 	http.HandleFunc("/", restartHandler)
 	http.ListenAndServe(*listenAddr, nil)
@@ -81,22 +89,26 @@ func restart(targetImageName string) {
 		log.Printf("[x] Unable to pull %s: %s\n", targetImageName, err)
 	}
 
-	log.Printf("Going to run the following containers:\n  - %s\n", strings.Join(stoppedContainers, "\n  - "))
-	for _, containerName := range stoppedContainers {
-		serviceName := config.findServiceToUp(targetImageName, containerName)
-		if serviceName == "" {
-			log.Printf("[x] Not found service for container: %s\n", containerName)
+	for _, config := range configs {
+		servicesToUp := config.findServicesToUp(targetImageName)
+		if len(servicesToUp) == 0 {
 			continue
 		}
 
-		log.Printf("  [>] starting %s ...\n", serviceName)
+		log.Printf("Going to run services from '%s':\n  - %s\n", config.Filename, strings.Join(servicesToUp, "\n  - "))
+		for _, serviceName := range servicesToUp {
+			log.Printf("  [>] starting %s ...\n", serviceName)
 
-		_, err := exec.Command("docker-compose", "-f", *composeFilepath, "up", "-d", "--no-deps", serviceName).Output()
-		if err != nil {
-			log.Printf("  [x] Unable to start %s: %s\n", serviceName, err)
-			continue
+			_, err := exec.Command("docker-compose", "-f", config.Filename, "up", "-d", "--no-deps", serviceName).Output()
+			if err != nil {
+				log.Printf("  [x] Unable to start %s: %s\n", serviceName, err)
+				continue
+			}
+
+			log.Printf("  [+] Done.\n")
 		}
-
-		log.Printf("  [+] Done.\n")
 	}
+
+	log.Printf("[+] Done execution")
+
 }

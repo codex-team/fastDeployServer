@@ -39,5 +39,4 @@ func MakeHTTPRequest(method string, url string, body []byte, headers map[string]
 func SendError(w http.ResponseWriter, error string, code int) {
 	log.Printf("%s\n", error)
 	http.Error(w, error, code)
-	return
 }

@@ -3,11 +3,11 @@ package main
 import (
 	"io/ioutil"
 	"log"
-	"strings"
 
 	"gopkg.in/yaml.v2"
 )
 
+// Docker Compose v3 configuration
 type DockerComposeConfig struct {
 	Filename string
 	Version  string                          `yaml:"version"`
@@ -16,10 +16,12 @@ type DockerComposeConfig struct {
 	Services map[string]DockerComposeService `yaml:"services"`
 }
 
+// Docker Compose v3 service settings in YAML
 type DockerComposeService struct {
 	Image string `yaml:"image"`
 }
 
+// Load DockerComposeConfig from filename
 func (c *DockerComposeConfig) parse(filepath string) {
 	c.Filename = filepath
 
@@ -35,15 +37,7 @@ func (c *DockerComposeConfig) parse(filepath string) {
 	log.Printf("[+] Load configuration from %s\n", filepath)
 }
 
-func (c *DockerComposeConfig) findServiceToUp(targetImageName, targetContainerName string) string {
-	for serviceName, serviceData := range c.Services {
-		if serviceData.Image == targetImageName && strings.Contains(targetContainerName, serviceName) {
-			return serviceName
-		}
-	}
-	return ""
-}
-
+// Find services names based on image with targetImageName
 func (c *DockerComposeConfig) findServicesToUp(targetImageName string) []string {
 	var servicesToUp []string
 	for serviceName, serviceData := range c.Services {

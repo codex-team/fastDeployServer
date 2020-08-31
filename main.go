@@ -37,37 +37,45 @@ func main() {
 	http.ListenAndServe(*listenAddr, nil)
 }
 
+// restartHandler - restart docker containers by the image name provided via webhook
 func restartHandler(w http.ResponseWriter, req *http.Request) {
 	keys, ok := req.URL.Query()["image"]
 	if !ok || len(keys[0]) < 1 {
-		log.Printf("Url Param 'image' is missing\n")
+		SendError(w, "url Param 'image' is missing", http.StatusBadRequest)
 		return
 	}
 	image := keys[0]
-	restart(image)
-}
-
-func restart(targetImageName string) {
-	cli, err := client.NewEnvClient()
-	if err != nil {
-		log.Fatalf("Unable to create docker client: %s", err)
+	if err := restart(image); err != nil {
+		SendError(w, fmt.Sprintf("Error: %s\n", err), http.StatusBadRequest)
+		return
 	}
 
+	w.WriteHeader(http.StatusOK)
+}
+
+// restart - restart docker containers by the targetImageName
+func restart(targetImageName string) error {
+	cli, err := client.NewEnvClient()
+	if err != nil {
+		return fmt.Errorf("unable to create docker client: %s", err)
+	}
+
+	// get list of all running containers
 	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
-		log.Fatalf("Unable to list docker containers: %s", err)
+		return fmt.Errorf("Unable to list docker containers: %s", err)
 	}
 
 	if len(containers) == 0 {
-		log.Printf("There are no containers running")
-		return
+		log.Printf("there are no containers running\n")
 	}
 
 	var stoppedContainers []string
 
+	// stop each container with image equals targetImageName
 	for _, container := range containers {
 		if len(container.Names) == 0 {
-			log.Printf("Container %s has no names", container.ID)
+			log.Printf("Container %s has no names\n", container.ID)
 			continue
 		}
 
@@ -88,18 +96,20 @@ func restart(targetImageName string) {
 
 	log.Printf("[>] pulling %s ...\n", targetImageName)
 
+	// pull new version of image
 	_, err = exec.Command("docker", "pull", targetImageName).Output()
 	if err != nil {
 		log.Printf("[x] Unable to pull %s: %s\n", targetImageName, err)
 	}
 
+	// start services in docker-compose files based on targetImageName
 	for _, config := range configs {
 		servicesToUp := config.findServicesToUp(targetImageName)
 		if len(servicesToUp) == 0 {
 			continue
 		}
 
-		log.Printf("Going to run services from '%s':\n  - %s\n", config.Filename, strings.Join(servicesToUp, "\n  - "))
+		log.Printf("Going to start services from '%s':\n  - %s\n", config.Filename, strings.Join(servicesToUp, "\n  - "))
 		for _, serviceName := range servicesToUp {
 			log.Printf("  [>] starting %s ...\n", serviceName)
 
@@ -113,6 +123,7 @@ func restart(targetImageName string) {
 		}
 	}
 
+	// notify by CodeX Bot
 	if *codexBotURL != "" {
 		data := url.Values{}
 		data.Set("message", fmt.Sprintf("📦 %s has been deployed (%s)", *serverName, targetImageName))
@@ -121,10 +132,10 @@ func restart(targetImageName string) {
 			"Content-Type": "application/x-www-form-urlencoded",
 		})
 		if err != nil {
-			log.Fatalf("Webhook error: %v", err)
+			return fmt.Errorf("Webhook error: %v", err)
 		}
 	}
 
 	log.Printf("[+] Done execution")
-
+	return nil
 }

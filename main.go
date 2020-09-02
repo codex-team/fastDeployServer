@@ -7,11 +7,16 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
+	"github.com/gorilla/mux"
 )
 
 var listenAddr = flag.String("addr", "localhost:8090", "listen host and port")
@@ -33,8 +38,34 @@ func main() {
 		configs = append(configs, config)
 	}
 
-	http.HandleFunc("/", restartHandler)
-	http.ListenAndServe(*listenAddr, nil)
+	router := mux.NewRouter()
+	router.HandleFunc("/", restartHandler).Methods("GET")
+
+	server := &http.Server{
+		Addr:    *listenAddr,
+		Handler: router,
+	}
+
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	<-done
+	log.Printf("Server stopped\n")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer func() {
+		cancel()
+	}()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Fatalf("Server Shutdown Failed:%+v\n", err)
+	}
 }
 
 // restartHandler - restart docker containers by the image name provided via webhook

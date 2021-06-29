@@ -125,6 +125,8 @@ func restart(targetImageName string) error {
 		}
 	}
 
+	log.Printf("[!] Stopped %d containers", len(stoppedContainers))
+
 	log.Printf("[>] pulling %s ...\n", targetImageName)
 
 	// pull new version of image

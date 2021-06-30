@@ -1,0 +1,21 @@
+version: "3.2"
+services:
+  collector:
+    image: codexteamuser/hawk-collector:prod
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./k1.env:/app/.env
+
+  redis3:
+    image: redis:6.0.9
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - redis-data:/data
+
+  collector2:
+    image: codexteamuser/hawk-collector:prod
+
+volumes:
+  redis-data:

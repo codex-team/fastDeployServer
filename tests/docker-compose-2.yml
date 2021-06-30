@@ -1,0 +1,10 @@
+version: "3.2"
+services:
+  garage:
+    image: codexteamuser/hawk-garage:prod
+
+  redis:
+    image: redis:6.0.9
+
+  redis2:
+    image: redis:6.0.9

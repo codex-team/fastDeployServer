@@ -4,24 +4,23 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/client"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
-
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/client"
-	"github.com/gorilla/mux"
 )
 
-var listenAddr = flag.String("addr", "localhost:8090", "listen host and port")
 var codexBotURL = flag.String("webhook", "", "notification URI from CodeX Bot")
+var interval = flag.Duration("interval", 15*time.Second, "server name")
 var serverName = flag.String("name", "default", "server name")
+
 var composeFilepaths arrayFlags
 var configs []DockerComposeConfig
 
@@ -38,59 +37,80 @@ func main() {
 		configs = append(configs, config)
 	}
 
-	router := mux.NewRouter()
-	router.HandleFunc("/", restartHandler).Methods("GET")
-
-	server := &http.Server{
-		Addr:    *listenAddr,
-		Handler: router,
-	}
-
+	var wg sync.WaitGroup
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("listen: %s\n", err)
+		for {
+			wg.Add(2)
+
+			ticker := time.NewTicker(*interval)
+
+			go func() {
+				updateAndRestart()
+				defer wg.Done()
+			}()
+
+			go func() {
+				<-ticker.C
+				defer wg.Done()
+			}()
+
+			wg.Wait()
 		}
 	}()
 
 	<-done
-	log.Printf("Server stopped\n")
+	log.Printf("Stopped\n")
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer func() {
-		cancel()
-	}()
+// getUniqueImages - parse compose configs and extract unique used images
+func getUniqueImages(configs []DockerComposeConfig) []string {
+	uniqueImagesSet := make(map[string]struct{})
+	for _, config := range configs {
+		for _, serviceData := range config.Services {
+			if _, ok := uniqueImagesSet[serviceData.Image]; !ok {
+				uniqueImagesSet[serviceData.Image] = struct{}{}
+			}
+		}
+	}
+	uniqueImagesList := make([]string, 0, len(uniqueImagesSet))
 
-	if err := server.Shutdown(ctx); err != nil {
-		log.Fatalf("Server Shutdown Failed:%+v\n", err)
+	for key, _ := range uniqueImagesSet {
+		uniqueImagesList = append(uniqueImagesList, key)
+	}
+	return uniqueImagesList
+}
+
+// refreshImages - update all used images and return those been updated
+func refreshImages(configs []DockerComposeConfig) map[string]struct{} {
+	uniqueImagesList := getUniqueImages(configs)
+	updatedImages := make(map[string]struct{})
+
+	for _, image := range uniqueImagesList {
+		if isUpdated := pullAndCheckImageHasUpdates(fmt.Sprintf("docker.io/%s", image)); isUpdated {
+			updatedImages[image] = struct{}{}
+		}
+	}
+
+	return updatedImages
+}
+
+// updateAndRestart - update images and restart compose services which use these images
+func updateAndRestart() {
+	images := refreshImages(configs)
+	if err := restartServices(configs, images); err != nil {
+		log.Fatalf("Fatal error: %s", err)
 	}
 }
 
-// restartHandler - restart docker containers by the image name provided via webhook
-func restartHandler(w http.ResponseWriter, req *http.Request) {
-	keys, ok := req.URL.Query()["image"]
-	if !ok || len(keys[0]) < 1 {
-		SendError(w, "url Param 'image' is missing", http.StatusBadRequest)
-		return
-	}
-	image := keys[0]
-	if err := restart(image); err != nil {
-		SendError(w, fmt.Sprintf("Error: %s\n", err), http.StatusBadRequest)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-}
-
-// restart - restart docker containers by the targetImageName
-func restart(targetImageName string) error {
-	cli, err := client.NewEnvClient()
+// restartServices - restart services from compose config which use updatedImages
+func restartServices(configs []DockerComposeConfig, updatedImages map[string]struct{}) error {
+	cli, err := client.NewClientWithOpts()
 	if err != nil {
 		return fmt.Errorf("unable to create docker client: %s", err)
 	}
-
 	// get list of all running containers
 	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
@@ -112,8 +132,8 @@ func restart(targetImageName string) error {
 
 		containerName := container.Names[0]
 		log.Printf("Container: %s %s %s\n", container.ID, container.Image, container.Names)
-		if container.Image == targetImageName {
-			log.Printf("  [>] stopping %s ...", container.ID)
+		if _, ok := updatedImages[container.Image]; ok {
+			log.Printf("  [>] stopping %s because of %s ...", container.ID, container.Image)
 
 			if err := cli.ContainerStop(context.Background(), container.ID, nil); err != nil {
 				log.Printf("  [x] Unable to stop container %s: %s\n", container.ID, err)
@@ -127,39 +147,35 @@ func restart(targetImageName string) error {
 
 	log.Printf("[!] Stopped %d containers", len(stoppedContainers))
 
-	log.Printf("[>] pulling %s ...\n", targetImageName)
-
-	// pull new version of image
-	_, err = exec.Command("docker", "pull", targetImageName).Output()
-	if err != nil {
-		log.Printf("[x] Unable to pull %s: %s\n", targetImageName, err)
-	}
-
-	// start services in docker-compose files based on targetImageName
+	//iterate docker-compose files on watch
 	for _, config := range configs {
-		servicesToUp := config.findServicesToUp(targetImageName)
-		if len(servicesToUp) == 0 {
-			continue
-		}
+		log.Printf("Starting containers from %s", config.Filename)
+		// iterate services in each docker-compose file
+		for serviceName, serviceData := range config.Services {
+			if _, ok := updatedImages[serviceData.Image]; ok {
+				//fmt.Printf("Need to update %s because of %s", serviceName, serviceData.Image)
+				log.Printf("  [>] starting %s because of %s ...\n", serviceName, serviceData.Image)
+				_, err := exec.Command("docker-compose", "-f", config.Filename, "up", "-d", "--no-deps", serviceName).Output()
+				if err != nil {
+					log.Printf("  [x] Unable to start %s: %s\n", serviceName, err)
+					continue
+				}
 
-		log.Printf("Going to start services from '%s':\n  - %s\n", config.Filename, strings.Join(servicesToUp, "\n  - "))
-		for _, serviceName := range servicesToUp {
-			log.Printf("  [>] starting %s ...\n", serviceName)
-
-			_, err := exec.Command("docker-compose", "-f", config.Filename, "up", "-d", "--no-deps", serviceName).Output()
-			if err != nil {
-				log.Printf("  [x] Unable to start %s: %s\n", serviceName, err)
-				continue
+				log.Printf("  [+] Done.\n")
 			}
-
-			log.Printf("  [+] Done.\n")
 		}
 	}
 
-	// notify by CodeX Bot
-	if *codexBotURL != "" {
+	// notify via CodeX Bot
+	if *codexBotURL != "" && len(updatedImages) > 0 {
+		// prepare a list of updated images for notification
+		updatedImagesList := make([]string, 0, len(updatedImages))
+		for key, _ := range updatedImages {
+			updatedImagesList = append(updatedImagesList, key)
+		}
+
 		data := url.Values{}
-		data.Set("message", fmt.Sprintf("📦 %s has been deployed (%s)", *serverName, targetImageName))
+		data.Set("message", fmt.Sprintf("📦 %s has been deployed: %s", *serverName, strings.Join(updatedImagesList, ", ")))
 
 		_, err := MakeHTTPRequest("POST", *codexBotURL, []byte(data.Encode()), map[string]string{
 			"Content-Type": "application/x-www-form-urlencoded",

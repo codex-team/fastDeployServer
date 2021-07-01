@@ -149,6 +149,8 @@ func restartServices(configs []DockerComposeConfig, updatedImages map[string]str
 
 	//iterate docker-compose files on watch
 	for _, config := range configs {
+		// reload config each time to monitor changes
+		config.reload()
 		log.Printf("Starting containers from %s", config.Filename)
 		// iterate services in each docker-compose file
 		for serviceName, serviceData := range config.Services {

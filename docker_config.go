@@ -22,6 +22,11 @@ type DockerComposeService struct {
 }
 
 // Load DockerComposeConfig from filename
+func (c *DockerComposeConfig) reload() {
+	c.parse(c.Filename)
+}
+
+// Load DockerComposeConfig from filename
 func (c *DockerComposeConfig) parse(filepath string) {
 	c.Filename = filepath
 

@@ -24,11 +24,19 @@ var serverName = flag.String("name", "default", "server name")
 var composeFilepaths arrayFlags
 var configs []DockerComposeConfig
 
+var dockerClient *client.Client
+
 func main() {
 	flag.Var(&composeFilepaths, "f", "docker-compose configuration path")
 	flag.Parse()
 	if len(composeFilepaths) == 0 {
 		composeFilepaths = []string{"docker-compose.yml"}
+	}
+
+	var err error
+	dockerClient, err = client.NewClientWithOpts()
+	if err != nil {
+		log.Fatalf("unable to create docker client: %s", err)
 	}
 
 	for _, file := range composeFilepaths {
@@ -107,12 +115,8 @@ func updateAndRestart() {
 
 // restartServices - restart services from compose config which use updatedImages
 func restartServices(configs []DockerComposeConfig, updatedImages map[string]struct{}) error {
-	cli, err := client.NewClientWithOpts()
-	if err != nil {
-		return fmt.Errorf("unable to create docker client: %s", err)
-	}
 	// get list of all running containers
-	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{})
+	containers, err := dockerClient.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
 		return fmt.Errorf("Unable to list docker containers: %s", err)
 	}
@@ -135,7 +139,7 @@ func restartServices(configs []DockerComposeConfig, updatedImages map[string]str
 		if _, ok := updatedImages[container.Image]; ok {
 			log.Printf("  [>] stopping %s because of %s ...", container.ID, container.Image)
 
-			if err := cli.ContainerStop(context.Background(), container.ID, nil); err != nil {
+			if err := dockerClient.ContainerStop(context.Background(), container.ID, nil); err != nil {
 				log.Printf("  [x] Unable to stop container %s: %s\n", container.ID, err)
 				continue
 			}

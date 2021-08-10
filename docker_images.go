@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/client"
 	"io"
 	"log"
 	"strings"
@@ -24,22 +23,13 @@ type DockerEvent struct {
 
 // deleteImage - remove image by target name
 func deleteImage(targetImageName string) {
-	cli, err := client.NewEnvClient()
-	if err != nil {
-		log.Fatalf("unable to create docker client: %s", err)
-	}
-	cli.ImageRemove(context.Background(), targetImageName, types.ImageRemoveOptions{})
+	dockerClient.ImageRemove(context.Background(), targetImageName, types.ImageRemoveOptions{})
 }
 
 // pullAndCheckImageHasUpdates - check whether the targetImageName has updates via pulling the image from remote repository
 func pullAndCheckImageHasUpdates(targetImageName string) bool {
-	cli, err := client.NewEnvClient()
-	if err != nil {
-		log.Fatalf("unable to create docker client: %s", err)
-	}
-
 	// try to pull image
-	events, err := cli.ImagePull(context.Background(), targetImageName, types.ImagePullOptions{})
+	events, err := dockerClient.ImagePull(context.Background(), targetImageName, types.ImagePullOptions{})
 	if err != nil {
 		log.Fatalf("Unable to list pull image %s: %s", targetImageName, err)
 	}

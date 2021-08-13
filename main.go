@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
-	"log"
+	"github.com/n0str/restrictedflags"
+	log "github.com/sirupsen/logrus"
 	"net/url"
 	"os"
 	"os/exec"
@@ -27,8 +28,12 @@ var configs []DockerComposeConfig
 var dockerClient *client.Client
 
 func main() {
+	logLevel := restrictedflags.New([]string{"panic", "fatal", "error", "warn", "info", "debug", "trace"})
+	flag.Var(&logLevel, "level", fmt.Sprintf("logging level (allowed: %s)", logLevel.AllowedValues))
 	flag.Var(&composeFilepaths, "f", "docker-compose configuration path")
 	flag.Parse()
+
+	log.SetLevel(getLogLevel(logLevel.Value))
 	if len(composeFilepaths) == 0 {
 		composeFilepaths = []string{"docker-compose.yml"}
 	}
@@ -39,8 +44,10 @@ func main() {
 		log.Fatalf("unable to create docker client: %s", err)
 	}
 
+	// initial configuration load
 	for _, file := range composeFilepaths {
 		var config DockerComposeConfig
+		log.Infof("load %s configuration", file)
 		config.parse(file)
 		configs = append(configs, config)
 	}
@@ -56,6 +63,7 @@ func main() {
 			ticker := time.NewTicker(*interval)
 
 			go func() {
+				log.Debugf("new sync interval")
 				updateAndRestart()
 				defer wg.Done()
 			}()
@@ -70,7 +78,7 @@ func main() {
 	}()
 
 	<-done
-	log.Printf("Stopped\n")
+	log.Infof("stopped")
 }
 
 // getUniqueImages - parse compose configs and extract unique used images
@@ -94,6 +102,7 @@ func getUniqueImages(configs []DockerComposeConfig) []string {
 // refreshImages - update all used images and return those been updated
 func refreshImages(configs []DockerComposeConfig) map[string]struct{} {
 	uniqueImagesList := getUniqueImages(configs)
+	log.Debugf("extracted unique images: %s", uniqueImagesList)
 	updatedImages := make(map[string]struct{})
 
 	for _, image := range uniqueImagesList {
@@ -108,6 +117,14 @@ func refreshImages(configs []DockerComposeConfig) map[string]struct{} {
 // updateAndRestart - update images and restart compose services which use these images
 func updateAndRestart() {
 	images := refreshImages(configs)
+
+	// return if there is nothing to update
+	if len(images) == 0 {
+		return
+	}
+
+	log.Infof("images to be pulled from registry: %s", images)
+
 	if err := restartServices(configs, images); err != nil {
 		log.Fatalf("Fatal error: %s", err)
 	}
@@ -118,11 +135,11 @@ func restartServices(configs []DockerComposeConfig, updatedImages map[string]str
 	// get list of all running containers
 	containers, err := dockerClient.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
-		return fmt.Errorf("Unable to list docker containers: %s", err)
+		return fmt.Errorf("unable to list docker containers: %s", err)
 	}
 
 	if len(containers) == 0 {
-		log.Printf("there are no containers running\n")
+		log.Debugf("there are no containers running\n")
 	}
 
 	var stoppedContainers []string
@@ -130,44 +147,43 @@ func restartServices(configs []DockerComposeConfig, updatedImages map[string]str
 	// stop each container with image equals targetImageName
 	for _, container := range containers {
 		if len(container.Names) == 0 {
-			log.Printf("Container %s has no names\n", container.ID)
+			log.Debugf("Container %s has no names\n", container.ID)
 			continue
 		}
 
 		containerName := container.Names[0]
-		log.Printf("Container: %s %s %s\n", container.ID, container.Image, container.Names)
+		log.Debugf("checking container: %s %s %s\n", container.ID, container.Image, container.Names)
 		if _, ok := updatedImages[container.Image]; ok {
-			log.Printf("  [>] stopping %s because of %s ...", container.ID, container.Image)
+			log.Infof("[>] stopping %s because of %s ...", container.ID, container.Image)
 
 			if err := dockerClient.ContainerStop(context.Background(), container.ID, nil); err != nil {
-				log.Printf("  [x] Unable to stop container %s: %s\n", container.ID, err)
+				log.Warnf("unable to stop container %s: %s\n", container.ID, err)
 				continue
 			}
 
-			log.Printf("  [+] Done.\n")
+			log.Infof("container stopped\n")
 			stoppedContainers = append(stoppedContainers, containerName)
 		}
 	}
 
-	log.Printf("[!] Stopped %d containers", len(stoppedContainers))
+	log.Infof("stopped %d containers", len(stoppedContainers))
 
 	//iterate docker-compose files on watch
 	for _, config := range configs {
 		// reload config each time to monitor changes
 		config.reload()
-		log.Printf("Starting containers from %s", config.Filename)
+		log.Infof("starting containers from %s", config.Filename)
 		// iterate services in each docker-compose file
 		for serviceName, serviceData := range config.Services {
 			if _, ok := updatedImages[serviceData.Image]; ok {
-				//fmt.Printf("Need to update %s because of %s", serviceName, serviceData.Image)
-				log.Printf("  [>] starting %s because of %s ...\n", serviceName, serviceData.Image)
+				log.Infof("  [>] starting %s because of %s ...\n", serviceName, serviceData.Image)
 				_, err := exec.Command("docker-compose", "-f", config.Filename, "up", "-d", "--no-deps", serviceName).Output()
 				if err != nil {
-					log.Printf("  [x] Unable to start %s: %s\n", serviceName, err)
+					log.Warnf("  [x] Unable to start %s: %s\n", serviceName, err)
 					continue
 				}
 
-				log.Printf("  [+] Done.\n")
+				log.Infof("  [+] Done.\n")
 			}
 		}
 	}
@@ -191,6 +207,6 @@ func restartServices(configs []DockerComposeConfig, updatedImages map[string]str
 		}
 	}
 
-	log.Printf("[+] Done execution")
+	log.Debugf("[+] Done execution")
 	return nil
 }

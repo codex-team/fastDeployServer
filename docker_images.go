@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/docker/docker/api/types"
+	log "github.com/sirupsen/logrus"
 	"io"
-	"log"
 	"strings"
 )
 
@@ -31,7 +31,7 @@ func pullAndCheckImageHasUpdates(targetImageName string) bool {
 	// try to pull image
 	events, err := dockerClient.ImagePull(context.Background(), targetImageName, types.ImagePullOptions{})
 	if err != nil {
-		log.Fatalf("Unable to list pull image %s: %s", targetImageName, err)
+		log.Fatalf("unable to list pull image %s: %s", targetImageName, err)
 	}
 
 	d := json.NewDecoder(events)
@@ -44,9 +44,11 @@ func pullAndCheckImageHasUpdates(targetImageName string) bool {
 				break
 			}
 
-			log.Fatalf("Fatal error during docker API event decoding: %s", err)
+			log.Fatalf("fatal error during docker API event decoding: %s", err)
 		}
 	}
+
+	log.Debugf("last API event status: %s", event.Status)
 
 	// Sample latest event for new image
 	// EVENT: {Status:Status: Downloaded newer image for busybox:latest Error: Progress:[==================================================>]  699.2kB/699.2kB ProgressDetail:{Current:699243 Total:699243}}
@@ -62,6 +64,6 @@ func pullAndCheckImageHasUpdates(targetImageName string) bool {
 		}
 	}
 
-	log.Fatalf("Unexpected latest event: %v", event)
+	log.Fatalf("unexpected latest event: %v", event)
 	return false
 }

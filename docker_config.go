@@ -2,8 +2,8 @@ package main
 
 import (
 	"io/ioutil"
-	"log"
 
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
 
@@ -32,14 +32,14 @@ func (c *DockerComposeConfig) parse(filepath string) {
 
 	yamlFile, err := ioutil.ReadFile(filepath)
 	if err != nil {
-		log.Fatalf("Yaml file get error: #%v ", err)
+		log.Fatalf("yaml file get error: #%v ", err)
 	}
 	err = yaml.Unmarshal(yamlFile, c)
 	if err != nil {
-		log.Fatalf("Yaml unmarshal error: %v", err)
+		log.Fatalf("yaml unmarshal error: %v", err)
 	}
 
-	log.Printf("[+] Load configuration from %s\n", filepath)
+	log.Debugf("[+] successfully loaded configuration from %s\n", filepath)
 }
 
 // Find services names based on image with targetImageName

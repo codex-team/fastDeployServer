@@ -4,8 +4,6 @@ services:
     image: codexteamuser/hawk-collector:prod
     restart: unless-stopped
     network_mode: host
-    volumes:
-      - ./k1.env:/app/.env
 
   redis3:
     image: redis:6.0.9

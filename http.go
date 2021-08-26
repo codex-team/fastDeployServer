@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"io/ioutil"
-	"log"
 	"net/http"
 )
 
@@ -33,10 +32,4 @@ func MakeHTTPRequest(method string, url string, body []byte, headers map[string]
 	}
 
 	return data, nil
-}
-
-// SendError - log error and send it via HTTP response with the code specified
-func SendError(w http.ResponseWriter, error string, code int) {
-	log.Printf("%s\n", error)
-	http.Error(w, error, code)
 }

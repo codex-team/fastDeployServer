@@ -94,7 +94,7 @@ func getUniqueImages(configs []DockerComposeConfig) []string {
 	}
 	uniqueImagesList := make([]string, 0, len(uniqueImagesSet))
 
-	for key, _ := range uniqueImagesSet {
+	for key := range uniqueImagesSet {
 		uniqueImagesList = append(uniqueImagesList, key)
 	}
 	return uniqueImagesList

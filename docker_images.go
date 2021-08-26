@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"github.com/docker/docker/api/types"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -23,7 +22,9 @@ type DockerEvent struct {
 
 // deleteImage - remove image by target name
 func deleteImage(targetImageName string) {
-	dockerClient.ImageRemove(context.Background(), targetImageName, types.ImageRemoveOptions{})
+	if _, err := dockerClient.ImageRemove(context.Background(), targetImageName, types.ImageRemoveOptions{}); err != nil {
+		log.Errorf("Cannot remove image: %s", err)
+	}
 }
 
 // pullAndCheckImageHasUpdates - check whether the targetImageName has updates via pulling the image from remote repository
@@ -57,11 +58,11 @@ func pullAndCheckImageHasUpdates(targetImageName string) bool {
 	// Sample latest event for up-to-date image
 	// EVENT: {Status:Status: Image is up to date for busybox:latest Error: Progress: ProgressDetail:{Current:0 Total:0}}
 	if event != nil {
-		if strings.Contains(event.Status, fmt.Sprintf("Downloaded newer image for")) {
+		if strings.Contains(event.Status, "Downloaded newer image for") {
 			return true
 		}
 
-		if strings.Contains(event.Status, fmt.Sprintf("Image is up to date for")) {
+		if strings.Contains(event.Status, "Image is up to date for") {
 			return false
 		}
 	}

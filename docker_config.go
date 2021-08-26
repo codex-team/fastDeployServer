@@ -23,7 +23,7 @@ type DockerComposeService struct {
 
 // Load DockerComposeConfig from filename
 func (c *DockerComposeConfig) reload() {
-	c.parse(c.Filename)
+	_ = c.parse(c.Filename)
 }
 
 // Load DockerComposeConfig from filename
@@ -43,15 +43,4 @@ func (c *DockerComposeConfig) parse(filepath string) error {
 
 	log.Debugf("[+] successfully loaded configuration from %s\n", filepath)
 	return nil
-}
-
-// Find services names based on image with targetImageName
-func (c *DockerComposeConfig) findServicesToUp(targetImageName string) []string {
-	var servicesToUp []string
-	for serviceName, serviceData := range c.Services {
-		if serviceData.Image == targetImageName {
-			servicesToUp = append(servicesToUp, serviceName)
-		}
-	}
-	return servicesToUp
 }

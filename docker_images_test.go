@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"github.com/docker/docker/client"
 	log "github.com/sirupsen/logrus"
+	"strings"
 	"testing"
 )
 
@@ -27,8 +29,15 @@ func Test_pullAndCheckImageHasUpdates(t *testing.T) {
 func Test_uniqueImagesOfDockerConfig(t *testing.T) {
 	setup()
 	var configs = []DockerComposeConfig{{}, {}}
-	configs[0].parse("tests/docker-compose-1.yml")
-	configs[1].parse("tests/docker-compose-2.yml")
+	err1 := configs[0].parse("tests/docker-compose-1.yml")
+	err2 := configs[1].parse("tests/docker-compose-2.yml")
+	err3 := configs[1].parse("tests/docker-compose-3.yml")
+
+	log.Printf("!! %s", err3.Error())
+
+	assert(t, err1 == nil, fmt.Sprintf("docker-compose-1 was parsed with a error: %s", err1))
+	assert(t, err2 == nil, fmt.Sprintf("docker-compose-2 was parsed with a error: %s", err2))
+	assert(t, strings.Contains(err3.Error(), "open tests/docker-compose-3.yml: no such file or directory"), "docker-compose-3 parse error invalid")
 	assert(t, testUnorderedEq(getUniqueImages(configs), []string{"codexteamuser/hawk-collector:prod", "redis:6.0.9", "codexteamuser/hawk-garage:prod"}), "invalid values of unique images")
 }
 
@@ -36,8 +45,8 @@ func Test_uniqueImagesOfDockerConfig(t *testing.T) {
 func Test_imagesRefreshAndRestart(t *testing.T) {
 	setup()
 	var configs = []DockerComposeConfig{{}, {}}
-	configs[0].parse("tests/docker-compose-1.yml")
-	configs[1].parse("tests/docker-compose-2.yml")
+	_ = configs[0].parse("tests/docker-compose-1.yml")
+	_ = configs[1].parse("tests/docker-compose-2.yml")
 	images := refreshImages(configs)
-	restartServices(configs, images)
+	_ = restartServices(configs, images)
 }

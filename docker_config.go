@@ -23,32 +23,24 @@ type DockerComposeService struct {
 
 // Load DockerComposeConfig from filename
 func (c *DockerComposeConfig) reload() {
-	c.parse(c.Filename)
+	_ = c.parse(c.Filename)
 }
 
 // Load DockerComposeConfig from filename
-func (c *DockerComposeConfig) parse(filepath string) {
+func (c *DockerComposeConfig) parse(filepath string) error {
 	c.Filename = filepath
 
 	yamlFile, err := ioutil.ReadFile(filepath)
 	if err != nil {
-		log.Fatalf("yaml file get error: #%v ", err)
+		log.Errorf("yaml file get error: #%v ", err)
+		return err
 	}
 	err = yaml.Unmarshal(yamlFile, c)
 	if err != nil {
-		log.Fatalf("yaml unmarshal error: %v", err)
+		log.Errorf("yaml unmarshal error: %v", err)
+		return err
 	}
 
 	log.Debugf("[+] successfully loaded configuration from %s\n", filepath)
-}
-
-// Find services names based on image with targetImageName
-func (c *DockerComposeConfig) findServicesToUp(targetImageName string) []string {
-	var servicesToUp []string
-	for serviceName, serviceData := range c.Services {
-		if serviceData.Image == targetImageName {
-			servicesToUp = append(servicesToUp, serviceName)
-		}
-	}
-	return servicesToUp
+	return nil
 }

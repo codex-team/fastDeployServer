@@ -48,8 +48,9 @@ func main() {
 	for _, file := range composeFilepaths {
 		var config DockerComposeConfig
 		log.Infof("load %s configuration", file)
-		config.parse(file)
-		configs = append(configs, config)
+		if err = config.parse(file); err == nil {
+			configs = append(configs, config)
+		}
 	}
 
 	var wg sync.WaitGroup
@@ -93,7 +94,7 @@ func getUniqueImages(configs []DockerComposeConfig) []string {
 	}
 	uniqueImagesList := make([]string, 0, len(uniqueImagesSet))
 
-	for key, _ := range uniqueImagesSet {
+	for key := range uniqueImagesSet {
 		uniqueImagesList = append(uniqueImagesList, key)
 	}
 	return uniqueImagesList
@@ -126,7 +127,7 @@ func updateAndRestart() {
 	log.Infof("images to be pulled from registry: %s", images)
 
 	if err := restartServices(configs, images); err != nil {
-		log.Fatalf("Fatal error: %s", err)
+		log.Errorf("error during restartServices: %s", err)
 	}
 }
 
@@ -192,7 +193,7 @@ func restartServices(configs []DockerComposeConfig, updatedImages map[string]str
 	if *codexBotURL != "" && len(updatedImages) > 0 {
 		// prepare a list of updated images for notification
 		updatedImagesList := make([]string, 0, len(updatedImages))
-		for key, _ := range updatedImages {
+		for key := range updatedImages {
 			updatedImagesList = append(updatedImagesList, key)
 		}
 

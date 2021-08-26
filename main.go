@@ -193,7 +193,7 @@ func restartServices(configs []DockerComposeConfig, updatedImages map[string]str
 	if *codexBotURL != "" && len(updatedImages) > 0 {
 		// prepare a list of updated images for notification
 		updatedImagesList := make([]string, 0, len(updatedImages))
-		for key, _ := range updatedImages {
+		for key := range updatedImages {
 			updatedImagesList = append(updatedImagesList, key)
 		}
 

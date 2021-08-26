@@ -48,8 +48,9 @@ func main() {
 	for _, file := range composeFilepaths {
 		var config DockerComposeConfig
 		log.Infof("load %s configuration", file)
-		config.parse(file)
-		configs = append(configs, config)
+		if err = config.parse(file); err == nil {
+			configs = append(configs, config)
+		}
 	}
 
 	var wg sync.WaitGroup
@@ -126,7 +127,7 @@ func updateAndRestart() {
 	log.Infof("images to be pulled from registry: %s", images)
 
 	if err := restartServices(configs, images); err != nil {
-		log.Fatalf("Fatal error: %s", err)
+		log.Errorf("error during restartServices: %s", err)
 	}
 }
 

@@ -27,19 +27,22 @@ func (c *DockerComposeConfig) reload() {
 }
 
 // Load DockerComposeConfig from filename
-func (c *DockerComposeConfig) parse(filepath string) {
+func (c *DockerComposeConfig) parse(filepath string) error {
 	c.Filename = filepath
 
 	yamlFile, err := ioutil.ReadFile(filepath)
 	if err != nil {
-		log.Fatalf("yaml file get error: #%v ", err)
+		log.Errorf("yaml file get error: #%v ", err)
+		return err
 	}
 	err = yaml.Unmarshal(yamlFile, c)
 	if err != nil {
-		log.Fatalf("yaml unmarshal error: %v", err)
+		log.Errorf("yaml unmarshal error: %v", err)
+		return err
 	}
 
 	log.Debugf("[+] successfully loaded configuration from %s\n", filepath)
+	return nil
 }
 
 // Find services names based on image with targetImageName

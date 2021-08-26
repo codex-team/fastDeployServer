@@ -31,7 +31,8 @@ func pullAndCheckImageHasUpdates(targetImageName string) bool {
 	// try to pull image
 	events, err := dockerClient.ImagePull(context.Background(), targetImageName, types.ImagePullOptions{})
 	if err != nil {
-		log.Fatalf("unable to list pull image %s: %s", targetImageName, err)
+		log.Errorf("unable to list pull image %s: %s", targetImageName, err)
+		return false
 	}
 
 	d := json.NewDecoder(events)
@@ -44,7 +45,8 @@ func pullAndCheckImageHasUpdates(targetImageName string) bool {
 				break
 			}
 
-			log.Fatalf("fatal error during docker API event decoding: %s", err)
+			log.Errorf("error during docker API event decoding: %s", err)
+			return false
 		}
 	}
 
@@ -64,6 +66,6 @@ func pullAndCheckImageHasUpdates(targetImageName string) bool {
 		}
 	}
 
-	log.Fatalf("unexpected latest event: %v", event)
+	log.Errorf("unexpected latest event: %v", event)
 	return false
 }

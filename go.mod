@@ -3,6 +3,7 @@ module fastDeployServer
 go 1.12
 
 require (
+	github.com/codex-team/hawk.go v1.2.2
 	github.com/containerd/containerd v1.5.2 // indirect
 	github.com/docker/docker v20.10.7+incompatible
 	github.com/docker/go-connections v0.4.0 // indirect

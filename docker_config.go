@@ -33,11 +33,13 @@ func (c *DockerComposeConfig) parse(filepath string) error {
 	yamlFile, err := ioutil.ReadFile(filepath)
 	if err != nil {
 		log.Errorf("yaml file get error: #%v ", err)
+		_ = hawkCatcher.Catch(err)
 		return err
 	}
 	err = yaml.Unmarshal(yamlFile, c)
 	if err != nil {
 		log.Errorf("yaml unmarshal error: %v", err)
+		_ = hawkCatcher.Catch(err)
 		return err
 	}
 

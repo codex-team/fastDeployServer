@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"github.com/codex-team/hawk.go"
 	"github.com/docker/docker/api/types"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -24,6 +25,7 @@ type DockerEvent struct {
 func deleteImage(targetImageName string) {
 	if _, err := dockerClient.ImageRemove(context.Background(), targetImageName, types.ImageRemoveOptions{}); err != nil {
 		log.Errorf("Cannot remove image: %s", err)
+		hawkCatcher.Catch(err)
 	}
 }
 
@@ -33,6 +35,7 @@ func pullAndCheckImageHasUpdates(targetImageName string) bool {
 	events, err := dockerClient.ImagePull(context.Background(), targetImageName, types.ImagePullOptions{})
 	if err != nil {
 		log.Errorf("unable to list pull image %s: %s", targetImageName, err)
+		hawkCatcher.Catch(err)
 		return false
 	}
 
@@ -47,6 +50,7 @@ func pullAndCheckImageHasUpdates(targetImageName string) bool {
 			}
 
 			log.Errorf("error during docker API event decoding: %s", err)
+			hawkCatcher.Catch(err, hawk.WithContext(events))
 			return false
 		}
 	}
@@ -68,5 +72,6 @@ func pullAndCheckImageHasUpdates(targetImageName string) bool {
 	}
 
 	log.Errorf("unexpected latest event: %v", event)
+	hawkCatcher.Catch(err)
 	return false
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	hawk "github.com/codex-team/hawk.go"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/n0str/restrictedflags"
@@ -21,11 +22,13 @@ import (
 var codexBotURL = flag.String("webhook", "", "notification URI from CodeX Bot")
 var interval = flag.Duration("interval", 15*time.Second, "server name")
 var serverName = flag.String("name", "default", "server name")
+var hawkAccessToken = flag.String("token", "", "Hawk access token")
 
 var composeFilepaths arrayFlags
 var configs []DockerComposeConfig
 
 var dockerClient *client.Client
+var hawkCatcher *hawk.Catcher
 
 func main() {
 	logLevel := restrictedflags.New([]string{"panic", "fatal", "error", "warn", "info", "debug", "trace"})
@@ -33,15 +36,30 @@ func main() {
 	flag.Var(&composeFilepaths, "f", "docker-compose configuration path")
 	flag.Parse()
 
+	var err error
+
+	options := hawk.DefaultHawkOptions()
+	options.AccessToken = *hawkAccessToken
+	options.Debug = logLevel.Value == "debug" || logLevel.Value == "trace"
+	options.Transport = hawk.HTTPTransport{}
+	options.Release = VERSION
+
+	hawkCatcher, err = hawk.New(options)
+	if err != nil {
+		log.Fatalf("cannot initialize Hawk Catcher: %s", err)
+	}
+
+	go hawkCatcher.Run()
+	defer hawkCatcher.Stop()
+
 	log.SetLevel(getLogLevel(logLevel.Value))
 	if len(composeFilepaths) == 0 {
 		composeFilepaths = []string{"docker-compose.yml"}
 	}
 
-	var err error
 	dockerClient, err = client.NewClientWithOpts()
 	if err != nil {
-		log.Fatalf("unable to create docker client: %s", err)
+		panic(fmt.Sprintf("unable to create docker client: %s", err))
 	}
 
 	// initial configuration load
@@ -128,6 +146,7 @@ func updateAndRestart() {
 
 	if err := restartServices(configs, images); err != nil {
 		log.Errorf("error during restartServices: %s", err)
+		hawkCatcher.Catch(err, hawk.WithContext(images))
 	}
 }
 
@@ -136,6 +155,9 @@ func restartServices(configs []DockerComposeConfig, updatedImages map[string]str
 	// get list of all running containers
 	containers, err := dockerClient.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
+		hawkCatcher.Catch(err, hawk.WithContext(struct {
+			updatedImages map[string]struct{}
+		}{updatedImages: updatedImages}))
 		return fmt.Errorf("unable to list docker containers: %s", err)
 	}
 
@@ -204,6 +226,9 @@ func restartServices(configs []DockerComposeConfig, updatedImages map[string]str
 			"Content-Type": "application/x-www-form-urlencoded",
 		})
 		if err != nil {
+			hawkCatcher.Catch(err, hawk.WithContext(struct {
+				message string
+			}{message: data.Encode()}))
 			return fmt.Errorf("Webhook error: %v", err)
 		}
 	}

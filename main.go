@@ -148,7 +148,7 @@ func updateAndRestart() {
 
 	if err := restartServices(configs, images); err != nil {
 		log.Errorf("error during restartServices: %s", err)
-		hawkCatcher.Catch(err, hawk.WithContext(images))
+		_ = hawkCatcher.Catch(err, hawk.WithContext(images))
 	}
 }
 
@@ -157,7 +157,7 @@ func restartServices(configs []DockerComposeConfig, updatedImages map[string]str
 	// get list of all running containers
 	containers, err := dockerClient.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
-		hawkCatcher.Catch(err, hawk.WithContext(struct {
+		_ = hawkCatcher.Catch(err, hawk.WithContext(struct {
 			updatedImages map[string]struct{}
 		}{updatedImages: updatedImages}))
 		return fmt.Errorf("unable to list docker containers: %s", err)
@@ -228,7 +228,7 @@ func restartServices(configs []DockerComposeConfig, updatedImages map[string]str
 			"Content-Type": "application/x-www-form-urlencoded",
 		})
 		if err != nil {
-			hawkCatcher.Catch(err, hawk.WithContext(struct {
+			_ = hawkCatcher.Catch(err, hawk.WithContext(struct {
 				message string
 			}{message: data.Encode()}))
 			return fmt.Errorf("Webhook error: %v", err)

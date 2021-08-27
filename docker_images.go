@@ -35,7 +35,7 @@ func pullAndCheckImageHasUpdates(targetImageName string) bool {
 	events, err := dockerClient.ImagePull(context.Background(), targetImageName, types.ImagePullOptions{})
 	if err != nil {
 		log.Errorf("unable to list pull image %s: %s", targetImageName, err)
-		hawkCatcher.Catch(err)
+		_ = hawkCatcher.Catch(err)
 		return false
 	}
 
@@ -50,7 +50,7 @@ func pullAndCheckImageHasUpdates(targetImageName string) bool {
 			}
 
 			log.Errorf("error during docker API event decoding: %s", err)
-			hawkCatcher.Catch(err, hawk.WithContext(events))
+			_ = hawkCatcher.Catch(err, hawk.WithContext(events))
 			return false
 		}
 	}
@@ -72,6 +72,6 @@ func pullAndCheckImageHasUpdates(targetImageName string) bool {
 	}
 
 	log.Errorf("unexpected latest event: %v", event)
-	hawkCatcher.Catch(err)
+	_ = hawkCatcher.Catch(err)
 	return false
 }

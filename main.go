@@ -49,7 +49,9 @@ func main() {
 		log.Fatalf("cannot initialize Hawk Catcher: %s", err)
 	}
 
-	go hawkCatcher.Run()
+	go func() {
+		_ = hawkCatcher.Run()
+	}()
 	defer hawkCatcher.Stop()
 
 	log.SetLevel(getLogLevel(logLevel.Value))

@@ -25,7 +25,7 @@ type DockerEvent struct {
 func deleteImage(targetImageName string) {
 	if _, err := dockerClient.ImageRemove(context.Background(), targetImageName, types.ImageRemoveOptions{}); err != nil {
 		log.Errorf("Cannot remove image: %s", err)
-		hawkCatcher.Catch(err)
+		_ = hawkCatcher.Catch(err)
 	}
 }
 

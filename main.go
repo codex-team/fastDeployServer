@@ -33,7 +33,6 @@ var composeFilepaths arrayFlags
 var configs []DockerComposeConfig
 
 var dockerClient *client.Client
-var authConfig types.AuthConfig
 var creds string
 var hawkCatcher *hawk.Catcher
 
@@ -78,8 +77,7 @@ func main() {
 	optVersion := client.WithVersion("1.42")
 
 	dockerClient, err = client.NewClientWithOpts(optVersion)
-
-	fmt.Println(dockerClient.DaemonHost())
+	
 	if err != nil {
 		panic(fmt.Sprintf("unable to create docker client: %s", err))
 	}

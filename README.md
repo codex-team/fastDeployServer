@@ -12,13 +12,21 @@ use these images and restart docker-compose services that use these images.
 ```
 Usage of ./fastDeployServer:
   -f value
-        docker-compose configuration path
+    	docker-compose configuration path
   -interval duration
-        server name (default 15s)
+    	server name (default 15s)
+  -level value
+    	logging level (allowed: [panic fatal error warn info debug trace])
   -name string
-        server name (default "default")
+    	server name (default "default")
+  -password string
+    	docker user password
+  -token string
+    	Hawk access token
+  -username string
+    	docker user
   -webhook string
-        notification URI from CodeX Bot
+    	notification URI from CodeX Bot
 ```
 
 ### Example

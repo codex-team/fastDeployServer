@@ -30,9 +30,20 @@ func deleteImage(targetImageName string) {
 }
 
 // pullAndCheckImageHasUpdates - check whether the targetImageName has updates via pulling the image from remote repository
-func pullAndCheckImageHasUpdates(targetImageName string) bool {
+func pullAndCheckImageHasUpdates(targetImageName string, creds string) bool {
+	var options *types.ImagePullOptions
+
+	// check is creds empty
+	if creds != "" {
+		options = &types.ImagePullOptions{
+			RegistryAuth: creds,
+		}
+	} else {
+		options = &types.ImagePullOptions{}
+	}
+
 	// try to pull image
-	events, err := dockerClient.ImagePull(context.Background(), targetImageName, types.ImagePullOptions{})
+	events, err := dockerClient.ImagePull(context.Background(), targetImageName, *options)
 	if err != nil {
 		log.Errorf("unable to list pull image %s: %s", targetImageName, err)
 		_ = hawkCatcher.Catch(err)

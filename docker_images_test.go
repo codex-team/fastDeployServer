@@ -21,8 +21,8 @@ func Test_pullAndCheckImageHasUpdates(t *testing.T) {
 	setup()
 	deleteImage("codexteamuser/hawk-collector:prod")
 
-	assert(t, pullAndCheckImageHasUpdates("docker.io/codexteamuser/hawk-collector:prod"), "newer image not found")
-	assert(t, pullAndCheckImageHasUpdates("docker.io/codexteamuser/hawk-collector:prod") == false, "image must already exist")
+	assert(t, pullAndCheckImageHasUpdates("docker.io/codexteamuser/hawk-collector:prod", creds), "newer image not found")
+	assert(t, pullAndCheckImageHasUpdates("docker.io/codexteamuser/hawk-collector:prod", creds) == false, "image must already exist")
 }
 
 // check that images are correctly parsed from dockerfiles
@@ -47,6 +47,6 @@ func Test_imagesRefreshAndRestart(t *testing.T) {
 	var configs = []DockerComposeConfig{{}, {}}
 	_ = configs[0].parse("tests/docker-compose-1.yml")
 	_ = configs[1].parse("tests/docker-compose-2.yml")
-	images := refreshImages(configs)
+	images := refreshImages(configs, creds)
 	_ = restartServices(configs, images)
 }

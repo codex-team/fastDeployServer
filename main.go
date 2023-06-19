@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	hawk "github.com/codex-team/hawk.go"
 	"github.com/docker/docker/api/types"
+	container2 "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/n0str/restrictedflags"
 	log "github.com/sirupsen/logrus"
@@ -22,12 +25,16 @@ import (
 var codexBotURL = flag.String("webhook", "", "notification URI from CodeX Bot")
 var interval = flag.Duration("interval", 15*time.Second, "server name")
 var serverName = flag.String("name", "default", "server name")
+var username = flag.String("username", "", "docker user")
+var password = flag.String("password", "", "docker user password")
 var hawkAccessToken = flag.String("token", "", "Hawk access token")
 
 var composeFilepaths arrayFlags
 var configs []DockerComposeConfig
 
 var dockerClient *client.Client
+var authConfig types.AuthConfig
+var creds string
 var hawkCatcher *hawk.Catcher
 
 func main() {
@@ -59,7 +66,20 @@ func main() {
 		composeFilepaths = []string{"docker-compose.yml"}
 	}
 
-	dockerClient, err = client.NewClientWithOpts()
+	// Create auth creds
+	jsonBytes, _ := json.Marshal(map[string]string{
+		"username": *username,
+		"password": *password,
+	})
+
+	creds = base64.StdEncoding.EncodeToString(jsonBytes)
+
+	// Set api version
+	optVersion := client.WithVersion("1.42")
+
+	dockerClient, err = client.NewClientWithOpts(optVersion)
+
+	fmt.Println(dockerClient.DaemonHost())
 	if err != nil {
 		panic(fmt.Sprintf("unable to create docker client: %s", err))
 	}
@@ -121,13 +141,13 @@ func getUniqueImages(configs []DockerComposeConfig) []string {
 }
 
 // refreshImages - update all used images and return those been updated
-func refreshImages(configs []DockerComposeConfig) map[string]struct{} {
+func refreshImages(configs []DockerComposeConfig, creds string) map[string]struct{} {
 	uniqueImagesList := getUniqueImages(configs)
 	log.Debugf("extracted unique images: %s", uniqueImagesList)
 	updatedImages := make(map[string]struct{})
 
 	for _, image := range uniqueImagesList {
-		if isUpdated := pullAndCheckImageHasUpdates(fmt.Sprintf("docker.io/%s", image)); isUpdated {
+		if isUpdated := pullAndCheckImageHasUpdates(image, creds); isUpdated {
 			updatedImages[image] = struct{}{}
 		}
 	}
@@ -137,7 +157,7 @@ func refreshImages(configs []DockerComposeConfig) map[string]struct{} {
 
 // updateAndRestart - update images and restart compose services which use these images
 func updateAndRestart() {
-	images := refreshImages(configs)
+	images := refreshImages(configs, creds)
 
 	// return if there is nothing to update
 	if len(images) == 0 {
@@ -181,7 +201,9 @@ func restartServices(configs []DockerComposeConfig, updatedImages map[string]str
 		if _, ok := updatedImages[container.Image]; ok {
 			log.Infof("[>] stopping %s because of %s ...", container.ID, container.Image)
 
-			if err := dockerClient.ContainerStop(context.Background(), container.ID, nil); err != nil {
+			stopOptions := container2.StopOptions{}
+
+			if err := dockerClient.ContainerStop(context.Background(), container.ID, stopOptions); err != nil {
 				log.Warnf("unable to stop container %s: %s\n", container.ID, err)
 				continue
 			}

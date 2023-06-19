@@ -47,6 +47,6 @@ func Test_imagesRefreshAndRestart(t *testing.T) {
 	var configs = []DockerComposeConfig{{}, {}}
 	_ = configs[0].parse("tests/docker-compose-1.yml")
 	_ = configs[1].parse("tests/docker-compose-2.yml")
-	images := refreshImages(configs)
+	images := refreshImages(configs, creds)
 	_ = restartServices(configs, images)
 }

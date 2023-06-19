@@ -77,7 +77,7 @@ func main() {
 	optVersion := client.WithVersion("1.42")
 
 	dockerClient, err = client.NewClientWithOpts(optVersion)
-	
+
 	if err != nil {
 		panic(fmt.Sprintf("unable to create docker client: %s", err))
 	}

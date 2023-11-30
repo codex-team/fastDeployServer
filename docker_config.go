@@ -18,7 +18,8 @@ type DockerComposeConfig struct {
 
 // Docker Compose v3 service settings in YAML
 type DockerComposeService struct {
-	Image string `yaml:"image"`
+	Image  string            `yaml:"image"`
+	Labels map[string]string `yaml:"labels"`
 }
 
 // Load DockerComposeConfig from filename

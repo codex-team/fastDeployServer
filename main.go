@@ -125,6 +125,9 @@ func getUniqueImages(configs []DockerComposeConfig) []string {
 	uniqueImagesSet := make(map[string]struct{})
 	for _, config := range configs {
 		for _, serviceData := range config.Services {
+			if enabled, ok := serviceData.Labels["com.fastdeployserver.enable"]; ok && enabled == "false" {
+				continue
+			}
 			if _, ok := uniqueImagesSet[serviceData.Image]; !ok {
 				uniqueImagesSet[serviceData.Image] = struct{}{}
 			}
@@ -213,6 +216,7 @@ func restartServices(configs []DockerComposeConfig, updatedImages map[string]str
 
 	log.Infof("stopped %d containers", len(stoppedContainers))
 
+	var updatedServices []string
 	//iterate docker-compose files on watch
 	for _, config := range configs {
 		// reload config each time to monitor changes
@@ -222,27 +226,22 @@ func restartServices(configs []DockerComposeConfig, updatedImages map[string]str
 		for serviceName, serviceData := range config.Services {
 			if _, ok := updatedImages[serviceData.Image]; ok {
 				log.Infof("  [>] starting %s because of %s ...\n", serviceName, serviceData.Image)
-				_, err := exec.Command("docker-compose", "-f", config.Filename, "up", "-d", "--no-deps", serviceName).Output()
+				_, err := exec.Command("docker", "compose", "-f", config.Filename, "up", "-d", "--no-deps", serviceName).Output()
 				if err != nil {
 					log.Warnf("  [x] Unable to start %s: %s\n", serviceName, err)
 					continue
 				}
 
+				updatedServices = append(updatedServices, serviceName)
 				log.Infof("  [+] Done.\n")
 			}
 		}
 	}
 
 	// notify via CodeX Bot
-	if *codexBotURL != "" && len(updatedImages) > 0 {
-		// prepare a list of updated images for notification
-		updatedImagesList := make([]string, 0, len(updatedImages))
-		for key := range updatedImages {
-			updatedImagesList = append(updatedImagesList, key)
-		}
-
+	if *codexBotURL != "" && len(updatedServices) > 0 {
 		data := url.Values{}
-		data.Set("message", fmt.Sprintf("📦 %s has been deployed: %s", *serverName, strings.Join(updatedImagesList, ", ")))
+		data.Set("message", fmt.Sprintf("📦 %s has been deployed: %s", *serverName, strings.Join(updatedServices, ", ")))
 
 		_, err := MakeHTTPRequest("POST", *codexBotURL, []byte(data.Encode()), map[string]string{
 			"Content-Type": "application/x-www-form-urlencoded",
